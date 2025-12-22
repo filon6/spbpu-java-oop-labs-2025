@@ -1,0 +1,5 @@
+exception/InvalidFileFormatException.class
+dictionary/DictionaryLoader.class
+translation/Translator.class
+exception/FileReadException.class
+main/Main.class
