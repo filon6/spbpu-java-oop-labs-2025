@@ -1,17 +1,21 @@
 package main;
 
 import program.AbstractProgram;
-import program.Supervisor;
+import supervisor.Supervisor;
 
 public class Main {
-    public static void main(String[] args) throws InterruptedException {
-        AbstractProgram p = new AbstractProgram(300, 900);
-        Supervisor s = new Supervisor(p);
+    public static void main(String[] args) {
+        try {
+            AbstractProgram p = new AbstractProgram(300, 900);
+            Supervisor s = new Supervisor(p);
 
-        s.startSupervisor();
+            s.startSupervisor();
 
-        Thread.sleep(7000);
+            Thread.sleep(7000);
 
-        s.stopSupervisor();
+            s.stopSupervisor();
+        } catch (InterruptedException | IllegalArgumentException e) {
+            System.out.println("Exception: " + e.getMessage());
+        }
     }
 }

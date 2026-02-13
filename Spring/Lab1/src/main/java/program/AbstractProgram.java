@@ -3,30 +3,18 @@ package program;
 import java.util.Random;
 
 public class AbstractProgram implements Runnable {
-
-    public enum ProgramState {
-        UNKNOWN,
-        STOPPING,
-        RUNNING,
-        FATAL_ERROR
-    }
-
     private final Object lock = new Object();
 
-    private ProgramState state = ProgramState.UNKNOWN;
-    private long revision = 0;          // увеличивается на КАЖДОЕ изменение state
-    private boolean terminated = false; // окончательное завершение
+    private ProgramState state;
+    private int revision; // Счётчик изменений состояния
+    private boolean terminated;
 
-    private final int minDelayMs;
-    private final int maxDelayMs;
+    private final int minDelayMs; // Интервал задержки демона между сменами состояния
+    private final int maxDelayMs; // Delay - задержка
     private final Random rnd = new Random();
 
     private Thread worker;
     private Thread daemon;
-
-    public AbstractProgram() {
-        this(300, 1200); // дефолтный интервал, чтобы final поля были инициализированы
-    }
 
     public AbstractProgram(int minDelayMs, int maxDelayMs) {
         if (minDelayMs <= 0 || maxDelayMs < minDelayMs) {
@@ -34,13 +22,9 @@ public class AbstractProgram implements Runnable {
         }
         this.minDelayMs = minDelayMs;
         this.maxDelayMs = maxDelayMs;
+        this.state = ProgramState.UNKNOWN;
     }
 
-    // =======================
-    // API ДЛЯ СУПЕРВИЗОРА
-    // =======================
-
-    /** Переводит программу в RUNNING и гарантирует запуск потоков (один раз). */
     public void startProgram() {
         synchronized (lock) {
             if (terminated) return;
@@ -64,18 +48,20 @@ public class AbstractProgram implements Runnable {
         }
     }
 
-    /** Переводит программу в STOPPING. */
     public void stopProgram() {
         synchronized (lock) {
-            if (terminated) return;
+            if (terminated) {
+                return;
+            }
             setStateLocked(ProgramState.STOPPING, "Supervisor");
         }
     }
 
-    /** Окончательно завершает программу (после этого worker и daemon должны выйти). */
     public void terminateProgram() {
         synchronized (lock) {
-            if (terminated) return;
+            if (terminated) {
+                return;
+            }
             terminated = true;
             revision++;
             System.out.println("[Supervisor] Program terminated (rev=" + revision + ")");
@@ -95,34 +81,20 @@ public class AbstractProgram implements Runnable {
         }
     }
 
-    /**
-     * Ждёт, пока revision станет больше lastSeenRevision.
-     * Это ключ к требованию "супервизор не пропускает ни одного статуса".
-     */
-    public Snapshot waitForNextChange(long lastSeenRevision) throws InterruptedException {
+    public boolean isTerminated() {
+        synchronized (lock) {
+            return terminated;
+        }
+    }
+
+    public long waitForNextRevision(long lastSeenRevision) throws InterruptedException {
         synchronized (lock) {
             while (!terminated && revision <= lastSeenRevision) {
                 lock.wait();
             }
-            return new Snapshot(state, revision, terminated);
+            return revision;
         }
     }
-
-    public static final class Snapshot {
-        public final ProgramState state;
-        public final long revision;
-        public final boolean terminated;
-
-        public Snapshot(ProgramState state, long revision, boolean terminated) {
-            this.state = state;
-            this.revision = revision;
-            this.terminated = terminated;
-        }
-    }
-
-    // =======================
-    // ЛОГИКА "ПРОГРАММЫ"
-    // =======================
 
     @Override
     public void run() {
@@ -134,23 +106,16 @@ public class AbstractProgram implements Runnable {
                     System.out.println("[Program] Worker exiting");
                     return;
                 }
-                // По ТЗ "абстрактная программа" может просто жить.
-                // Реальную "работу" можно имитировать сном ниже.
             }
 
             try {
                 Thread.sleep(200);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                // Если прервали, корректно завершаемся
                 terminateProgram();
             }
         }
     }
-
-    // =======================
-    // ДЕМОН СЛУЧАЙНЫХ СОСТОЯНИЙ
-    // =======================
 
     private void stateChangeDaemon() {
         System.out.println("[Daemon] Started");
@@ -168,17 +133,22 @@ public class AbstractProgram implements Runnable {
             ProgramState next = randomNonUnknownState();
 
             synchronized (lock) {
-                if (terminated) return;
+                if (terminated) {
+                    return;
+                }
                 setStateLocked(next, "Daemon");
             }
         }
     }
 
     private ProgramState randomNonUnknownState() {
-        // 0..2 -> RUNNING, STOPPING, FATAL_ERROR
         int x = rnd.nextInt(3);
-        if (x == 0) return ProgramState.RUNNING;
-        if (x == 1) return ProgramState.STOPPING;
+        if (x == 0) {
+            return ProgramState.RUNNING;
+        }
+        if (x == 1) {
+            return ProgramState.STOPPING;
+        }
         return ProgramState.FATAL_ERROR;
     }
 
@@ -193,13 +163,14 @@ public class AbstractProgram implements Runnable {
 
     private void setStateLocked(ProgramState newState, String who) {
         ProgramState oldState = this.state;
-        if (oldState == newState) return;
+        if (oldState == newState) {
+            return;
+        }
 
         this.state = newState;
         revision++;
 
         System.out.println("[" + who + "] State changed: " + oldState + " -> " + newState + " (rev=" + revision + ")");
-
         lock.notifyAll();
     }
 }
