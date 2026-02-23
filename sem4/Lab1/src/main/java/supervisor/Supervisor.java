@@ -4,9 +4,8 @@ import program.AbstractProgram;
 import program.ProgramState;
 
 public class Supervisor extends Thread {
-
     private final AbstractProgram program;
-    private volatile boolean running = false;
+    private volatile boolean running;
 
     public Supervisor(AbstractProgram program) {
         super("Supervisor");
@@ -18,7 +17,7 @@ public class Supervisor extends Thread {
             return;
         }
 
-        System.out.println("\n[Supervisor] Starting supervisor...");
+        System.out.println("[Supervisor] Starting supervisor...");
         running = true;
 
         program.startProgram();
@@ -30,7 +29,7 @@ public class Supervisor extends Thread {
             return;
         }
 
-        System.out.println("\n[Supervisor] Stop request...");
+        System.out.println("[Supervisor] Stop request...");
         running = false;
 
         program.stopProgram();
@@ -41,7 +40,7 @@ public class Supervisor extends Thread {
     public void run() {
         System.out.println("[Supervisor] Supervisor thread started");
 
-        long lastRev = program.getRevision();
+        int lastRev = program.getRevision();
 
         while (running) {
             try {
@@ -56,10 +55,10 @@ public class Supervisor extends Thread {
                 System.out.println("[Supervisor] Observed state: " + state + " (rev=" + lastRev + ")");
 
                 if (state == ProgramState.STOPPING) {
-                    System.out.println("\n[Supervisor] STOPPING detected -> restarting program");
+                    System.out.println("[Supervisor] STOPPING detected -> restarting program");
                     program.startProgram();
                 } else if (state == ProgramState.FATAL_ERROR) {
-                    System.out.println("\n[Supervisor] FATAL_ERROR detected -> terminating program");
+                    System.out.println("[Supervisor] FATAL_ERROR detected -> terminating program");
                     program.terminateProgram();
                     break;
                 }
@@ -72,6 +71,6 @@ public class Supervisor extends Thread {
             }
         }
 
-        System.out.println("\n[Supervisor] Supervisor thread terminated");
+        System.out.println("[Supervisor] Supervisor thread terminated");
     }
 }

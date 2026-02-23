@@ -6,14 +6,14 @@ import supervisor.Supervisor;
 public class Main {
     public static void main(String[] args) {
         try {
-            AbstractProgram p = new AbstractProgram(300, 900);
-            Supervisor s = new Supervisor(p);
+            AbstractProgram program = new AbstractProgram(300, 900);
+            Supervisor supervisor = new Supervisor(program);
 
-            s.startSupervisor();
+            supervisor.startSupervisor();
 
             Thread.sleep(7000);
 
-            s.stopSupervisor();
+            supervisor.stopSupervisor();
         } catch (InterruptedException | IllegalArgumentException e) {
             System.out.println("Exception: " + e.getMessage());
         }

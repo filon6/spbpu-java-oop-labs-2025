@@ -2,16 +2,17 @@ package program;
 
 import java.util.Random;
 
+import static program.ProgramState.*;
+
 public class AbstractProgram implements Runnable {
     private final Object lock = new Object();
 
-    private ProgramState state;
-    private int revision; // Счётчик изменений состояния
+    private ProgramState state = ProgramState.UNKNOWN;
+    private int revision;
     private boolean terminated;
-
-    private final int minDelayMs; // Интервал задержки демона между сменами состояния
-    private final int maxDelayMs; // Delay - задержка
-    private final Random rnd = new Random();
+    private final int minDelayMs;
+    private final int maxDelayMs;
+    private final Random random = new Random();
 
     private Thread worker;
     private Thread daemon;
@@ -22,24 +23,19 @@ public class AbstractProgram implements Runnable {
         }
         this.minDelayMs = minDelayMs;
         this.maxDelayMs = maxDelayMs;
-        this.state = ProgramState.UNKNOWN;
     }
 
     public void startProgram() {
         synchronized (lock) {
-            if (terminated) return;
-
+            if (terminated) {
+                return;
+            }
             if (worker == null) {
                 worker = new Thread(this, "AbstractProgram-Worker");
                 worker.start();
             }
             if (daemon == null) {
-                daemon = new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        stateChangeDaemon();
-                    }
-                }, "AbstractProgram-Daemon");
+                daemon = new Thread(this::stateChangeDaemon, "AbstractProgram-Daemon");
                 daemon.setDaemon(true);
                 daemon.start();
             }
@@ -69,13 +65,22 @@ public class AbstractProgram implements Runnable {
         }
     }
 
+    public int waitForNextRevision(int lastSeenRevision) throws InterruptedException {
+        synchronized (lock) {
+            while (!terminated && revision <= lastSeenRevision) {
+                lock.wait();
+            }
+            return revision;
+        }
+    }
+
     public ProgramState getState() {
         synchronized (lock) {
             return state;
         }
     }
 
-    public long getRevision() {
+    public int getRevision() {
         synchronized (lock) {
             return revision;
         }
@@ -84,15 +89,6 @@ public class AbstractProgram implements Runnable {
     public boolean isTerminated() {
         synchronized (lock) {
             return terminated;
-        }
-    }
-
-    public long waitForNextRevision(long lastSeenRevision) throws InterruptedException {
-        synchronized (lock) {
-            while (!terminated && revision <= lastSeenRevision) {
-                lock.wait();
-            }
-            return revision;
         }
     }
 
@@ -130,30 +126,24 @@ public class AbstractProgram implements Runnable {
 
             sleepRandomInterval();
 
-            ProgramState next = randomNonUnknownState();
+            ProgramState nextState = randomNonUnknownState();
 
             synchronized (lock) {
                 if (terminated) {
                     return;
                 }
-                setStateLocked(next, "Daemon");
+                setStateLocked(nextState, "Daemon");
             }
         }
     }
 
     private ProgramState randomNonUnknownState() {
-        int x = rnd.nextInt(3);
-        if (x == 0) {
-            return ProgramState.RUNNING;
-        }
-        if (x == 1) {
-            return ProgramState.STOPPING;
-        }
-        return ProgramState.FATAL_ERROR;
+        ProgramState[] values = {RUNNING, STOPPING, FATAL_ERROR};
+        return values[random.nextInt(values.length)];
     }
 
     private void sleepRandomInterval() {
-        int delay = minDelayMs + rnd.nextInt(maxDelayMs - minDelayMs + 1);
+        int delay = minDelayMs + random.nextInt(maxDelayMs - minDelayMs + 1);
         try {
             Thread.sleep(delay);
         } catch (InterruptedException e) {
